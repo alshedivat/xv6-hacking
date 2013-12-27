@@ -9,18 +9,55 @@
 #include "mmu.h"
 #include "spinlock.h"
 
-void freerange(void *vstart, void *vend);
-extern char end[]; // first address after kernel loaded from ELF file
+#define QEMUSZ 512*1024*1024  // QEMU predefined size (see Makefile)
 
-struct run {
-  struct run *next;
-};
+void freerange(void *vstart, void *vend);
+extern char end[];  // first address after kernel loaded from ELF file
+char* bottom;       // first page after the freebitmap
+int BMSIZE;         // freebitmap size
 
 struct {
   struct spinlock lock;
   int use_lock;
-  struct run *freelist;
+  int working_byte;
+  char* ceiling;
+  char* freebitmap;
 } kmem;
+
+// Auxillary functions for working with bitmap
+void update_working_byte(int byte_ind) {
+  // Keep working byte being the smallest non zero byte in the freebitmap
+  if (kmem.freebitmap[byte_ind] && byte_ind < kmem.working_byte)
+    kmem.working_byte = byte_ind;
+
+  // If working byte became a zero byte, go and find the first non zero one
+  while (!kmem.freebitmap[kmem.working_byte])
+    ++kmem.working_byte;
+}
+
+void set_bit(char* v, int bit) {
+  uint bit_num = (v - bottom) / PGSIZE;
+  uint byte_ind = bit_num / 8;
+  uint bit_pos = bit_num % 8;
+
+  if (bit)
+    kmem.freebitmap[byte_ind] |= (1<<bit_pos);
+  else
+    kmem.freebitmap[byte_ind] &= ~(1<<bit_pos);
+
+  update_working_byte(byte_ind);
+}
+
+char* get_free_page(void) {
+  int bit_pos = __builtin_ctz(kmem.freebitmap[kmem.working_byte]);
+  int bit_num = kmem.working_byte * 8 + bit_pos;
+  char* v = (char*)(bottom + bit_num * PGSIZE);
+
+  if (v >= kmem.ceiling)
+    return 0;
+
+  return v;
+}
 
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
@@ -32,23 +69,26 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
-  freerange(vstart, vend);
+
+  // Place the bitmap right at the "end"
+  kmem.freebitmap = end;
+  BMSIZE = (QEMUSZ - v2p(end)) / (8 * PGSIZE + 1);
+  bottom = (char*)PGROUNDUP((uint)end + BMSIZE);
+
+  // Initialize freebitmap:
+  // - memset the freebitmap with ones,
+  // - memorize the ceiling virtual address
+  // - set working byte to 0
+  memset(kmem.freebitmap, 255, BMSIZE);
+  kmem.ceiling = vend;
+  kmem.working_byte = 0;
 }
 
 void
 kinit2(void *vstart, void *vend)
 {
-  freerange(vstart, vend);
+  kmem.ceiling = vend;
   kmem.use_lock = 1;
-}
-
-void
-freerange(void *vstart, void *vend)
-{
-  char *p;
-  p = (char*)PGROUNDUP((uint)vstart);
-  for(; p + PGSIZE <= (char*)vend; p += PGSIZE)
-    kfree(p);
 }
 
 //PAGEBREAK: 21
@@ -59,8 +99,6 @@ freerange(void *vstart, void *vend)
 void
 kfree(char *v)
 {
-  struct run *r;
-
   if((uint)v % PGSIZE || v < end || v2p(v) >= PHYSTOP)
     panic("kfree");
 
@@ -69,9 +107,10 @@ kfree(char *v)
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
-  r = (struct run*)v;
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+
+  // Set the propper bit for the free page
+  set_bit(v, 1);
+
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -82,13 +121,14 @@ kfree(char *v)
 char*
 kalloc(void)
 {
-  struct run *r;
-
   if(kmem.use_lock)
     acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
+
+  // Get a free page and update the freebitmap
+  char* r = get_free_page();
+  if (r)
+    set_bit(r, 0);
+
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
