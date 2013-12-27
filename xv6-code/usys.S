@@ -29,3 +29,11 @@ SYSCALL(getpid)
 SYSCALL(sbrk)
 SYSCALL(sleep)
 SYSCALL(uptime)
+
+// Kaust Shared Memory
+SYSCALL(ksmget)
+SYSCALL(ksmattach)
+SYSCALL(ksmdetach)
+SYSCALL(ksmdelete)
+SYSCALL(ksminfo)
+SYSCALL(pgused)

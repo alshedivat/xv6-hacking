@@ -7,6 +7,7 @@ struct proc;
 struct spinlock;
 struct stat;
 struct superblock;
+struct ksminfo_t;
 
 // bio.c
 void            binit(void);
@@ -66,9 +67,19 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+int             get_allocpgnum(void);
 
 // kbd.c
 void            kbdintr(void);
+
+// ksm.c
+void            ksminit(void);
+int             ksmget(int key, uint size);
+int             ksmattach(int hd, int flag);
+int             ksmdetach(int hd);
+int             ksmdelete(int hd);
+int             ksminfo(int hd, struct ksminfo_t* info);
+void            ksm_copy_proc(struct proc* sp, struct proc* tp);
 
 // lapic.c
 int             cpunum(void);
@@ -168,7 +179,7 @@ pde_t*          setupkvm(void);
 char*           uva2ka(pde_t*, char*);
 int             allocuvm(pde_t*, uint, uint);
 int             deallocuvm(pde_t*, uint, uint);
-void            freevm(pde_t*);
+void            freevm(pde_t*, uint);
 void            inituvm(pde_t*, char*, uint);
 int             loaduvm(pde_t*, char*, struct inode*, uint, uint);
 pde_t*          copyuvm(pde_t*, uint);
@@ -176,6 +187,7 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pde_t*          walkpgdir(pde_t* pgdir, const void* va, int alloc);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

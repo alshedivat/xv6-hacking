@@ -99,6 +99,14 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 
+// Kaust Shared Memory system calls
+extern int sys_ksmget(void);
+extern int sys_ksmattach(void);
+extern int sys_ksmdetach(void);
+extern int sys_ksmdelete(void);
+extern int sys_ksminfo(void);
+extern int sys_pgused(void);
+
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,
@@ -121,6 +129,14 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+
+// Kaust Shared Memory system calls
+[SYS_ksmget]    sys_ksmget,
+[SYS_ksmattach] sys_ksmattach,
+[SYS_ksmdetach] sys_ksmdetach,
+[SYS_ksmdelete] sys_ksmdelete,
+[SYS_ksminfo]   sys_ksminfo,
+[SYS_pgused]    sys_pgused,
 };
 
 void

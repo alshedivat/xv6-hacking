@@ -4,6 +4,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "x86.h"
+#include "ksm.h"
 #include "proc.h"
 #include "spinlock.h"
 
@@ -70,6 +71,13 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  // KSM initialization
+  p->ksm_freebitmap = kalloc();
+  memset(p->ksm_freebitmap, 255, KSM_FREEBM_SZ);
+  p->ksm_mstable = (struct ksmmemseg_t*)kalloc();
+  memset(p->ksm_mstable, 0, PGSIZE);
+  p->ksm_bottom = (char*)KERNBASE;
+
   return p;
 }
 
@@ -110,6 +118,8 @@ growproc(int n)
   uint sz;
   
   sz = proc->sz;
+  if (sz + n >= (uint)proc->ksm_bottom)
+      return -1;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
       return -1;
@@ -146,6 +156,9 @@ fork(void)
   np->parent = proc;
   *np->tf = *proc->tf;
 
+  // Let the child inherit from the parent all the KSM attached segments
+  ksm_copy_proc(np, proc);
+
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
@@ -179,6 +192,11 @@ exit(void)
       proc->ofile[fd] = 0;
     }
   }
+
+  // Detach all shared regions
+  int hd;
+  for (hd = 1; hd <= KSM_SEG_MAX_NUM; ++hd)
+    ksmdetach(hd);
 
   iput(proc->cwd);
   proc->cwd = 0;
@@ -224,7 +242,9 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+        kfree(p->ksm_freebitmap);
+        kfree((char*)p->ksm_mstable);
+        freevm(p->pgdir, (uint)p->ksm_bottom);
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;

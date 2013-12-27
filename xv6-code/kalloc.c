@@ -20,7 +20,20 @@ struct {
   struct spinlock lock;
   int use_lock;
   struct run *freelist;
+  int enable_pgcount;
+  int allocpgnum;
 } kmem;
+
+// Acquire lock, read the current value from kmem.allocpgnum,
+// release lock, return the value.
+inline int get_allocpgnum(void) {
+  if (kmem.use_lock)
+    acquire(&kmem.lock);
+  int allocpgnum = kmem.allocpgnum;
+  if (kmem.use_lock)
+    release(&kmem.lock);
+  return allocpgnum;
+}
 
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
@@ -32,13 +45,18 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
+  kmem.enable_pgcount = 0;
   freerange(vstart, vend);
+  kmem.enable_pgcount = 1;
+  kmem.allocpgnum = 0;
 }
 
 void
 kinit2(void *vstart, void *vend)
 {
+  kmem.enable_pgcount = 0;
   freerange(vstart, vend);
+  kmem.enable_pgcount = 1;
   kmem.use_lock = 1;
 }
 
@@ -61,8 +79,12 @@ kfree(char *v)
 {
   struct run *r;
 
-  if((uint)v % PGSIZE || v < end || v2p(v) >= PHYSTOP)
-    panic("kfree");
+  if((uint)v % PGSIZE)
+    panic("kfree 1");
+  if(v < end)
+    panic("kfree 2");
+  if(v2p(v) >= PHYSTOP)
+    panic("kfree 3");
 
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
@@ -72,6 +94,8 @@ kfree(char *v)
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
+  if (kmem.enable_pgcount)
+    --kmem.allocpgnum;
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -87,8 +111,11 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r) {
     kmem.freelist = r->next;
+    if (kmem.enable_pgcount)
+      ++kmem.allocpgnum;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;

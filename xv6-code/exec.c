@@ -4,6 +4,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "defs.h"
+#include "ksm.h"
 #include "x86.h"
 #include "elf.h"
 
@@ -89,12 +90,18 @@ exec(char *path, char **argv)
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);
-  freevm(oldpgdir);
+  freevm(oldpgdir, (uint)proc->ksm_bottom);
+
+  // Detach shared regions
+  int hd;
+  for (hd = 1; hd <= KSM_SEG_MAX_NUM; ++hd)
+    ksmdetach(hd);
+
   return 0;
 
  bad:
   if(pgdir)
-    freevm(pgdir);
+    freevm(pgdir, (uint)proc->ksm_bottom);
   if(ip)
     iunlockput(ip);
   return -1;

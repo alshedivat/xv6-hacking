@@ -88,3 +88,9 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_pgused(void)
+{
+  return get_allocpgnum();
+}
