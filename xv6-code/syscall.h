@@ -20,3 +20,17 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+
+// Kaust Shared Memory
+#define SYS_ksmget     101
+#define SYS_ksmattach  102
+#define SYS_ksmdetach  103
+#define SYS_ksmdelete  104
+#define SYS_ksminfo    105
+#define SYS_pgused     106
+
+// Semaphores
+#define SYS_sem_get    201
+#define SYS_sem_delete 202
+#define SYS_sem_signal 203
+#define SYS_sem_wait   204

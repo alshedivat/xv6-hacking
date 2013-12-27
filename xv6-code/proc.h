@@ -49,6 +49,14 @@ struct context {
   uint eip;
 };
 
+// KSM proc shared memory segment info structure
+// NOTE: the bottom pointer should be page aligned everytime
+struct ksmmemseg_t {
+  char* bottom;           // A pointer to the bottom of a segment
+  uint pgnum;             // The size of the segment in pages
+  uint gettime;           // The time when the proc called get for this seg
+};
+
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -66,6 +74,14 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // KSM information
+  char* ksm_bottom;                 // The current lowest address of the ksm
+  char* ksm_freebitmap;             // Bit map for the shared memory region
+  struct ksmmemseg_t* ksm_mstable;  // Shared memory segments location info
+
+  // Semaphores information
+  uint* sem_gettimes;
 };
 
 // Process memory is laid out contiguously, low addresses first:

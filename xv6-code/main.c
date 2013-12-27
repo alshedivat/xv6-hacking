@@ -31,6 +31,8 @@ main(void)
   tvinit();        // trap vectors
   binit();         // buffer cache
   fileinit();      // file table
+  ksminit();       // shared memory
+  sem_init();      // semaphores
   iinit();         // inode cache
   ideinit();       // disk
   if(!ismp)

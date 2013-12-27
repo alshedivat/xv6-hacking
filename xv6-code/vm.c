@@ -42,7 +42,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
@@ -263,7 +263,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     else if((*pte & PTE_P) != 0){
       pa = PTE_ADDR(*pte);
       if(pa == 0)
-        panic("kfree");
+        panic("deallocuvm: kfree");
       char *v = p2v(pa);
       kfree(v);
       *pte = 0;
@@ -275,13 +275,13 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 // Free a page table and all the physical memory pages
 // in the user part.
 void
-freevm(pde_t *pgdir)
+freevm(pde_t *pgdir, uint size)
 {
   uint i;
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, KERNBASE, 0);
+  deallocuvm(pgdir, size, 0);
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char * v = p2v(PTE_ADDR(pgdir[i]));
@@ -332,7 +332,7 @@ copyuvm(pde_t *pgdir, uint sz)
   return d;
 
 bad:
-  freevm(d);
+  freevm(d, (uint)proc->ksm_bottom);
   return 0;
 }
 
